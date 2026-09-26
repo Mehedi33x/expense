@@ -10,15 +10,14 @@
     </header>
     <section class="storage-bar">
       <template v-if="storageState === 'connected'">
-        <span class="ok">● Synced with Google Sheets{{ syncing ? " (syncing…)" : "" }}</span>
+        <span class="ok">● Synced with Google Sheets{{ syncing ? ' (syncing…)' : '' }}</span>
         <button @click="loadFromSheet" :disabled="syncing">Refresh</button>
       </template>
       <template v-else-if="storageState === 'connecting'">
         <span class="warn">Connecting to Google Sheets…</span>
       </template>
       <template v-else-if="storageState === 'not-configured'">
-        <span class="warn">Google Sheets URL not configured. Check the SHEET_API_URL
-          constant.</span>
+        <span class="warn">Google Sheets URL not configured. Check the SHEET_API_URL constant.</span>
       </template>
       <template v-else>
         <span class="warn">⚠️ Could not reach Google Sheets. Data will NOT be saved.</span>
@@ -47,6 +46,7 @@
           <input v-model="investorForm.name" type="text" placeholder="Investor name" required />
           <input v-model.number="investorForm.amount" type="number" step="0.01" min="0.01" placeholder="Amount"
             required />
+          <input v-model="investorForm.date" type="date" class="date-input" :max="todayISO()" required />
           <input v-model="investorForm.comment" type="text" placeholder="Comment (optional)" class="comment-input" />
           <button type="submit">Add</button>
         </form>
@@ -56,20 +56,15 @@
               <strong>{{ inv.name }}</strong>
               <span>{{ formatMoney(inv.amount) }}</span>
             </div>
-            <!-- ⬇️ Comment display -->
             <div v-if="inv.comment" class="entry-comment">
               💬 {{ inv.comment }}
             </div>
             <div class="entry-meta">
               <span>{{ formatDateTime(inv.date) }}</span>
-              <button class="link-btn" @click="removeInvestor(inv.id)">
-                remove
-              </button>
+              <button class="link-btn" @click="removeInvestor(inv.id)">remove</button>
             </div>
           </li>
-          <li v-if="!monthInvestors.length" class="empty">
-            No investors added for this month yet.
-          </li>
+          <li v-if="!monthInvestors.length" class="empty">No investors added for this month yet.</li>
         </ul>
       </div>
       <!-- ============ Expenses Panel ============ -->
@@ -79,6 +74,7 @@
           <input v-model="expenseForm.note" type="text" placeholder="What for" required />
           <input v-model.number="expenseForm.amount" type="number" step="0.01" min="0.01" placeholder="Amount"
             required />
+          <input v-model="expenseForm.date" type="date" class="date-input" :max="todayISO()" required />
           <input v-model="expenseForm.comment" type="text" placeholder="Comment (optional)" class="comment-input" />
           <button type="submit">Add</button>
         </form>
@@ -88,20 +84,15 @@
               <strong>{{ exp.note }}</strong>
               <span>{{ formatMoney(exp.amount) }}</span>
             </div>
-            <!-- ⬇️ Comment display -->
             <div v-if="exp.comment" class="entry-comment">
               💬 {{ exp.comment }}
             </div>
             <div class="entry-meta">
               <span>{{ formatDateTime(exp.date) }}</span>
-              <button class="link-btn" @click="removeExpense(exp.id)">
-                remove
-              </button>
+              <button class="link-btn" @click="removeExpense(exp.id)">remove</button>
             </div>
           </li>
-          <li v-if="!monthExpensesSorted.length" class="empty">
-            No expenses logged for this month yet.
-          </li>
+          <li v-if="!monthExpensesSorted.length" class="empty">No expenses logged for this month yet.</li>
         </ul>
       </div>
     </section>
@@ -119,9 +110,7 @@
           <tr v-for="day in dailyBreakdown" :key="day.date">
             <td>{{ day.date }}</td>
             <td>{{ formatMoney(day.spent) }}</td>
-            <td :class="{ negative: day.runningRemaining < 0 }">
-              {{ formatMoney(day.runningRemaining) }}
-            </td>
+            <td :class="{ negative: day.runningRemaining < 0 }">{{ formatMoney(day.runningRemaining) }}</td>
           </tr>
         </tbody>
       </table>
@@ -130,204 +119,216 @@
   </div>
 </template>
 <script>
-const SHEET_API_URL =
-  "https://script.google.com/macros/s/AKfycbxWFfqK53sM7Ki4JSy6gCvBPQtt6dCsCjjFeO4QwDIyYXaVB5cYlZclNy82OpcPEPvE/exec";
+// ============================================
+// ⚠️ আপনার Apps Script Web App URL
+// ============================================
+const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbxWFfqK53sM7Ki4JSy6gCvBPQtt6dCsCjjFeO4QwDIyYXaVB5cYlZclNy82OpcPEPvE/exec'
 export default {
-  name: "App",
+  name: 'App',
   data() {
     return {
       investors: [],
       expenses: [],
-      investorForm: { name: "", amount: null, comment: "" },
-      expenseForm: { note: "", amount: null, comment: "" },
+      investorForm: { name: '', amount: null, comment: '', date: this.todayISO() },
+      expenseForm: { note: '', amount: null, comment: '', date: this.todayISO() },
       currentMonth: this.startOfMonth(new Date()),
-      storageState: "connecting",
-      syncing: false,
-    };
+      storageState: 'connecting',
+      syncing: false
+    }
   },
   computed: {
     monthKey() {
-      return this.toMonthKey(this.currentMonth);
+      return this.toMonthKey(this.currentMonth)
     },
     monthLabel() {
-      return this.currentMonth.toLocaleDateString(undefined, {
-        month: "long",
-        year: "numeric",
-      });
+      return this.currentMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
     },
     monthInvestors() {
       return this.investors
-        .filter((i) => this.toMonthKey(new Date(i.date)) === this.monthKey)
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
+        .filter(i => this.toMonthKey(new Date(i.date)) === this.monthKey)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
     },
     monthExpensesSorted() {
       return this.expenses
-        .filter((e) => this.toMonthKey(new Date(e.date)) === this.monthKey)
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
+        .filter(e => this.toMonthKey(new Date(e.date)) === this.monthKey)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
     },
     monthInvested() {
-      return this.monthInvestors.reduce((sum, i) => sum + Number(i.amount), 0);
+      return this.monthInvestors.reduce((sum, i) => sum + Number(i.amount), 0)
     },
     monthSpent() {
-      return this.monthExpensesSorted.reduce(
-        (sum, e) => sum + Number(e.amount),
-        0,
-      );
+      return this.monthExpensesSorted.reduce((sum, e) => sum + Number(e.amount), 0)
     },
     monthRemaining() {
-      return this.monthInvested - this.monthSpent;
+      return this.monthInvested - this.monthSpent
     },
     dailyBreakdown() {
-      const byDay = {};
+      const byDay = {}
       this.expenses
-        .filter((e) => this.toMonthKey(new Date(e.date)) === this.monthKey)
-        .forEach((e) => {
-          const day = new Date(e.date).toISOString().slice(0, 10);
-          byDay[day] = (byDay[day] || 0) + Number(e.amount);
-        });
-      const days = Object.keys(byDay).sort();
-      let running = this.monthInvested;
-      return days.map((day) => {
-        running -= byDay[day];
-        return { date: day, spent: byDay[day], runningRemaining: running };
-      });
-    },
+        .filter(e => this.toMonthKey(new Date(e.date)) === this.monthKey)
+        .forEach(e => {
+          const day = new Date(e.date).toISOString().slice(0, 10)
+          byDay[day] = (byDay[day] || 0) + Number(e.amount)
+        })
+      const days = Object.keys(byDay).sort()
+      let running = this.monthInvested
+      return days.map(day => {
+        running -= byDay[day]
+        return { date: day, spent: byDay[day], runningRemaining: running }
+      })
+    }
   },
   async created() {
-    await this.loadFromSheet();
+    await this.loadFromSheet()
   },
   methods: {
     startOfMonth(d) {
-      return new Date(d.getFullYear(), d.getMonth(), 1);
+      return new Date(d.getFullYear(), d.getMonth(), 1)
     },
     toMonthKey(d) {
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    },
+    todayISO() {
+      const d = new Date()
+      const yyyy = d.getFullYear()
+      const mm = String(d.getMonth() + 1).padStart(2, '0')
+      const dd = String(d.getDate()).padStart(2, '0')
+      return `${yyyy}-${mm}-${dd}`
     },
     shiftMonth(delta) {
-      const d = new Date(this.currentMonth);
-      d.setMonth(d.getMonth() + delta);
-      this.currentMonth = d;
+      const d = new Date(this.currentMonth)
+      d.setMonth(d.getMonth() + delta)
+      this.currentMonth = d
     },
     formatMoney(n) {
       return Number(n ?? 0).toLocaleString(undefined, {
         minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
+        maximumFractionDigits: 2
+      })
     },
     formatDateTime(iso) {
-      return new Date(iso).toLocaleString();
+      return new Date(iso).toLocaleString()
     },
+    // ---------- CRUD ----------
     addInvestor() {
-      if (!this.investorForm.name || !this.investorForm.amount) return;
+      if (!this.investorForm.name || !this.investorForm.amount || !this.investorForm.date) return
+      const selected = new Date(
+        this.investorForm.date + 'T' + new Date().toTimeString().slice(0, 8)
+      )
       const entry = {
         id: Date.now(),
         name: this.investorForm.name.trim(),
         amount: this.investorForm.amount,
-        date: new Date().toISOString(),
-        comment: (this.investorForm.comment || "").trim(), 
-      };
-      this.investors.push(entry);
-      this.investorForm = { name: "", amount: null, comment: "" };
-      this.saveAllToSheet();
+        date: selected.toISOString(),
+        comment: (this.investorForm.comment || '').trim()
+      }
+      this.investors.push(entry)
+      this.investorForm = { name: '', amount: null, comment: '', date: this.todayISO() }
+      this.saveAllToSheet()
     },
     removeInvestor(id) {
-      this.investors = this.investors.filter((i) => i.id !== id);
-      this.saveAllToSheet();
+      this.investors = this.investors.filter(i => i.id !== id)
+      this.saveAllToSheet()
     },
     addExpense() {
-      if (!this.expenseForm.note || !this.expenseForm.amount) return;
+      if (!this.expenseForm.note || !this.expenseForm.amount || !this.expenseForm.date) return
+      const selected = new Date(
+        this.expenseForm.date + 'T' + new Date().toTimeString().slice(0, 8)
+      )
       const entry = {
         id: Date.now(),
         note: this.expenseForm.note.trim(),
         amount: this.expenseForm.amount,
-        date: new Date().toISOString(),
-        comment: (this.expenseForm.comment || "").trim(), 
-      };
-      this.expenses.push(entry);
-      this.expenseForm = { note: "", amount: null, comment: "" };
-      this.saveAllToSheet();
+        date: selected.toISOString(),
+        comment: (this.expenseForm.comment || '').trim()
+      }
+      this.expenses.push(entry)
+      this.expenseForm = { note: '', amount: null, comment: '', date: this.todayISO() }
+      this.saveAllToSheet()
     },
     removeExpense(id) {
-      this.expenses = this.expenses.filter((e) => e.id !== id);
-      this.saveAllToSheet();
+      this.expenses = this.expenses.filter(e => e.id !== id)
+      this.saveAllToSheet()
     },
+    // ---------- Google Sheets sync ----------
     async loadFromSheet() {
-      if (!SHEET_API_URL || SHEET_API_URL.includes("YOUR_APPS_SCRIPT")) {
-        this.storageState = "not-configured";
-        return;
+      if (!SHEET_API_URL || SHEET_API_URL.includes('YOUR_APPS_SCRIPT')) {
+        this.storageState = 'not-configured'
+        return
       }
-      this.storageState = "connecting";
+      this.storageState = 'connecting'
       try {
-        const res = await fetch(SHEET_API_URL);
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || "Unknown error");
-        const rows = data.rows || [];
+        const res = await fetch(SHEET_API_URL)
+        const data = await res.json()
+        if (!data.ok) throw new Error(data.error || 'Unknown error')
+        const rows = data.rows || []
         this.investors = rows
-          .filter((r) => r.type === "investor")
-          .map((r) => ({
+          .filter(r => r.type === 'investor')
+          .map(r => ({
             id: Number(r.id),
             name: r.name,
             amount: Number(r.amount),
             date: r.date,
-            comment: r.comment || "", 
-          }));
+            comment: r.comment || ''
+          }))
         this.expenses = rows
-          .filter((r) => r.type === "expense")
-          .map((r) => ({
+          .filter(r => r.type === 'expense')
+          .map(r => ({
             id: Number(r.id),
             note: r.name,
             amount: Number(r.amount),
             date: r.date,
-            comment: r.comment || "", 
-          }));
-        this.storageState = "connected";
+            comment: r.comment || ''
+          }))
+        this.storageState = 'connected'
       } catch (e) {
-        console.error("Load failed", e);
-        this.storageState = "error";
+        console.error('Load failed', e)
+        this.storageState = 'error'
       }
     },
     async saveAllToSheet() {
-      if (this.storageState !== "connected") return;
-      this.syncing = true;
+      if (this.storageState !== 'connected') return
+      this.syncing = true
       try {
         const rows = [
-          ...this.investors.map((i) => ({
+          ...this.investors.map(i => ({
             id: i.id,
-            type: "investor",
+            type: 'investor',
             name: i.name,
             amount: i.amount,
             date: i.date,
-            comment: i.comment || "", 
+            comment: i.comment || ''
           })),
-          ...this.expenses.map((e) => ({
+          ...this.expenses.map(e => ({
             id: e.id,
-            type: "expense",
+            type: 'expense',
             name: e.note,
             amount: e.amount,
             date: e.date,
-            comment: e.comment || "", 
-          })),
-        ];
+            comment: e.comment || ''
+          }))
+        ]
         await fetch(SHEET_API_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: "replace-all", rows }),
-        });
-        setTimeout(() => this.loadFromSheet(), 400);
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'replace-all', rows })
+        })
+        setTimeout(() => this.loadFromSheet(), 400)
       } catch (e) {
-        console.error("Save failed", e);
-        this.storageState = "error";
+        console.error('Save failed', e)
+        this.storageState = 'error'
       } finally {
-        setTimeout(() => {
-          this.syncing = false;
-        }, 800);
+        setTimeout(() => { this.syncing = false }, 800)
       }
-    },
-  },
-};
+    }
+  }
+}
 </script>
 <style>
+/* =========================
+   Base
+========================= */
 :root {
   --primary: #2563eb;
   --primary-dark: #1d4ed8;
@@ -350,37 +351,27 @@ body {
   margin: 0;
   background: #ffffff;
   color: var(--text);
-  font-family:
-    Inter,
-    ui-sans-serif,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 button,
 input {
   font: inherit;
 }
 button {
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease,
-    transform 0.15s ease,
-    box-shadow 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease,
+    color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
 button:active {
   transform: translateY(1px);
 }
+/* App Container — বড় করা হয়েছে */
 #app {
-  width: min(1180px, calc(100% - 40px));
+  width: min(1400px, calc(100% - 40px));
   margin: 0 auto;
   padding: 38px 0 60px;
 }
+/* Header */
 .header {
   display: flex;
   align-items: center;
@@ -429,6 +420,7 @@ button:active {
   color: var(--primary);
   background: #eff6ff;
 }
+/* Storage Bar */
 .storage-bar {
   display: flex;
   align-items: center;
@@ -480,6 +472,7 @@ button:active {
   opacity: 0.5;
   cursor: not-allowed;
 }
+/* Summary Cards */
 .summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -546,6 +539,7 @@ button:active {
 .card.remain.negative::after {
   background: var(--red);
 }
+/* Panels */
 .panels {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -571,10 +565,13 @@ button:active {
 .panel h2 {
   margin-bottom: 18px;
 }
+/* =========================
+   Forms — 2-Row Grid
+========================= */
 .row-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 130px auto;
-  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
   margin-bottom: 18px;
 }
 .row-form input {
@@ -587,9 +584,7 @@ button:active {
   background: #ffffff;
   color: #111827;
   font-size: 13px;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .row-form input::placeholder {
   color: #9ca3af;
@@ -611,11 +606,13 @@ button:active {
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
+  white-space: nowrap;
 }
 .row-form button:hover {
   background: var(--primary-dark);
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
+/* Entry Lists */
 .entry-list {
   list-style: none;
   padding: 0;
@@ -687,6 +684,7 @@ button:active {
   font-style: italic;
   text-align: center;
 }
+/* Daily Breakdown */
 .daily {
   padding: 22px;
   border: 1px solid var(--border);
@@ -736,11 +734,58 @@ button:active {
   color: var(--red);
   font-weight: 750;
 }
+/* =========================
+   Comment + Date Features
+========================= */
+.comment-input {
+  font-size: 12px !important;
+  color: #6b7280;
+}
+.comment-input::placeholder {
+  color: #9ca3af;
+  font-style: italic;
+}
+.date-input {
+  font-size: 12px !important;
+  color: #6b7280;
+  cursor: pointer;
+}
+.date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+}
+.date-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+.entry-comment {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+  border-radius: 6px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+  font-style: italic;
+}
+/* Focus Accessibility */
 button:focus-visible,
 input:focus-visible,
 label:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.2);
   outline-offset: 2px;
+}
+/* =========================
+   Responsive
+========================= */
+@media (max-width: 1000px) {
+  .row-form {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 @media (max-width: 800px) {
   #app {
@@ -799,6 +844,12 @@ label:focus-visible {
   }
   .card .value {
     font-size: 25px;
+  }
+  .comment-input {
+    font-size: 13px !important;
+  }
+  .date-input {
+    font-size: 13px !important;
   }
 }
 </style>
