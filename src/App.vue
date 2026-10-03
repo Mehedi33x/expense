@@ -119,7 +119,7 @@
   </div>
 </template>
 <script>
-const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbwYvXWWfUnFqZa7yespRVDp1fC4k98KmsUiDKnWj-fb70wS_Ln5L8xnLdPbDtMRZBA8/exec'
+const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbyUMQQYGW2JPaaEoB81cHqriwVIy0ztrqPrbjzS1kOYphPfjgS2_SDcIApLxmfDiV4m'
 export default {
   name: 'App',
   data() {
