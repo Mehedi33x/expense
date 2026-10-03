@@ -10,18 +10,13 @@
     </header>
     <section class="storage-bar">
       <template v-if="storageState === 'connected'">
-        <span class="ok">● Synced with Google Sheets{{ syncing ? ' (syncing…)' : '' }}</span>
-        <button @click="loadFromSheet" :disabled="syncing">Refresh</button>
+        <span class="ok">● Synced with Firestore{{ syncing ? ' (syncing…)' : '' }}</span>
       </template>
       <template v-else-if="storageState === 'connecting'">
-        <span class="warn">Connecting to Google Sheets…</span>
-      </template>
-      <template v-else-if="storageState === 'not-configured'">
-        <span class="warn">Google Sheets URL not configured. Check the SHEET_API_URL constant.</span>
+        <span class="warn">Connecting to Firestore…</span>
       </template>
       <template v-else>
-        <span class="warn">⚠️ Could not reach Google Sheets. Data will NOT be saved.</span>
-        <button @click="loadFromSheet">Retry</button>
+        <span class="warn">⚠️ Could not reach Firestore. Data will NOT be saved.</span>
       </template>
     </section>
     <section class="summary">
@@ -61,7 +56,7 @@
             </div>
             <div class="entry-meta">
               <span>{{ formatDateTime(inv.date) }}</span>
-              <button class="link-btn" @click="removeInvestor(inv.id)">remove</button>
+              <button class="link-btn" @click="removeEntry(inv.id)">remove</button>
             </div>
           </li>
           <li v-if="!monthInvestors.length" class="empty">No investors added for this month yet.</li>
@@ -89,7 +84,7 @@
             </div>
             <div class="entry-meta">
               <span>{{ formatDateTime(exp.date) }}</span>
-              <button class="link-btn" @click="removeExpense(exp.id)">remove</button>
+              <button class="link-btn" @click="removeEntry(exp.id)">remove</button>
             </div>
           </li>
           <li v-if="!monthExpensesSorted.length" class="empty">No expenses logged for this month yet.</li>
@@ -118,19 +113,29 @@
     </section>
   </div>
 </template>
+
 <script>
-const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbyUMQQYGW2JPaaEoB81cHqriwVIy0ztrqPrbjzS1kOYphPfjgS2_SDcIApLxmfDiV4m'
+import { db } from './firebase'
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  onSnapshot
+} from 'firebase/firestore'
+
 export default {
   name: 'App',
   data() {
     return {
       investors: [],
       expenses: [],
-      investorForm: { name: '', amount: null, comment: '', date: this.todayISO() },
-      expenseForm: { note: '', amount: null, comment: '', date: this.todayISO() },
+      investorForm: { name: '', amount: null, date: this.todayISO(), comment: '' },
+      expenseForm: { note: '', amount: null, date: this.todayISO(), comment: '' },
       currentMonth: this.startOfMonth(new Date()),
       storageState: 'connecting',
-      syncing: false
+      syncing: false,
+      unsubscribe: null
     }
   },
   computed: {
@@ -161,12 +166,10 @@ export default {
     },
     dailyBreakdown() {
       const byDay = {}
-      this.expenses
-        .filter(e => this.toMonthKey(new Date(e.date)) === this.monthKey)
-        .forEach(e => {
-          const day = new Date(e.date).toISOString().slice(0, 10)
-          byDay[day] = (byDay[day] || 0) + Number(e.amount)
-        })
+      this.monthExpensesSorted.forEach(e => {
+        const day = new Date(e.date).toISOString().slice(0, 10)
+        byDay[day] = (byDay[day] || 0) + Number(e.amount)
+      })
       const days = Object.keys(byDay).sort()
       let running = this.monthInvested
       return days.map(day => {
@@ -175,8 +178,11 @@ export default {
       })
     }
   },
-  async created() {
-    await this.loadFromSheet()
+  mounted() {
+    this.loadFromFirestore()
+  },
+  beforeUnmount() {
+    if (this.unsubscribe) this.unsubscribe()
   },
   methods: {
     startOfMonth(d) {
@@ -206,124 +212,100 @@ export default {
     formatDateTime(iso) {
       return new Date(iso).toLocaleString()
     },
-    // ---------- CRUD ----------
-    addInvestor() {
-      if (!this.investorForm.name || !this.investorForm.amount || !this.investorForm.date) return
-      const selected = new Date(
-        this.investorForm.date + 'T' + new Date().toTimeString().slice(0, 8)
-      )
-      const entry = {
-        id: Date.now(),
-        name: this.investorForm.name.trim(),
-        amount: this.investorForm.amount,
-        date: selected.toISOString(),
-        comment: (this.investorForm.comment || '').trim()
-      }
-      this.investors.push(entry)
-      this.investorForm = { name: '', amount: null, comment: '', date: this.todayISO() }
-      this.saveAllToSheet()
-    },
-    removeInvestor(id) {
-      this.investors = this.investors.filter(i => i.id !== id)
-      this.saveAllToSheet()
-    },
-    addExpense() {
-      if (!this.expenseForm.note || !this.expenseForm.amount || !this.expenseForm.date) return
-      const selected = new Date(
-        this.expenseForm.date + 'T' + new Date().toTimeString().slice(0, 8)
-      )
-      const entry = {
-        id: Date.now(),
-        note: this.expenseForm.note.trim(),
-        amount: this.expenseForm.amount,
-        date: selected.toISOString(),
-        comment: (this.expenseForm.comment || '').trim()
-      }
-      this.expenses.push(entry)
-      this.expenseForm = { note: '', amount: null, comment: '', date: this.todayISO() }
-      this.saveAllToSheet()
-    },
-    removeExpense(id) {
-      this.expenses = this.expenses.filter(e => e.id !== id)
-      this.saveAllToSheet()
-    },
-    // ---------- Google Sheets sync ----------
-    async loadFromSheet() {
-      if (!SHEET_API_URL || SHEET_API_URL.includes('YOUR_APPS_SCRIPT')) {
-        this.storageState = 'not-configured'
-        return
-      }
+
+    // ---------- Firestore realtime listener ----------
+    loadFromFirestore() {
       this.storageState = 'connecting'
       try {
-        const res = await fetch(SHEET_API_URL)
-        const data = await res.json()
-        if (!data.ok) throw new Error(data.error || 'Unknown error')
-        const rows = data.rows || []
-        this.investors = rows
-          .filter(r => r.type === 'investor')
-          .map(r => ({
-            id: Number(r.id),
-            name: r.name,
-            amount: Number(r.amount),
-            date: r.date,
-            comment: r.comment || ''
-          }))
-        this.expenses = rows
-          .filter(r => r.type === 'expense')
-          .map(r => ({
-            id: Number(r.id),
-            note: r.name,
-            amount: Number(r.amount),
-            date: r.date,
-            comment: r.comment || ''
-          }))
-        this.storageState = 'connected'
+        const col = collection(db, 'entries')
+        this.unsubscribe = onSnapshot(
+          col,
+          (snapshot) => {
+            const all = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+            this.investors = all
+              .filter(x => x.type === 'investor')
+              .map(x => ({
+                id: x.id,
+                name: x.name,
+                amount: Number(x.amount),
+                date: x.date,
+                comment: x.comment || ''
+              }))
+            this.expenses = all
+              .filter(x => x.type === 'expense')
+              .map(x => ({
+                id: x.id,
+                note: x.name,
+                amount: Number(x.amount),
+                date: x.date,
+                comment: x.comment || ''
+              }))
+            this.storageState = 'connected'
+          },
+          (err) => {
+            console.error('Firestore listen failed', err)
+            this.storageState = 'error'
+          }
+        )
       } catch (e) {
-        console.error('Load failed', e)
+        console.error(e)
         this.storageState = 'error'
       }
     },
-    async saveAllToSheet() {
-      if (this.storageState !== 'connected') return
+
+    // ---------- CRUD ----------
+    async addInvestor() {
+      const f = this.investorForm
+      if (!f.name || !f.amount || !f.date) return
       this.syncing = true
       try {
-        const rows = [
-          ...this.investors.map(i => ({
-            id: i.id,
-            type: 'investor',
-            name: i.name,
-            amount: i.amount,
-            date: i.date,
-            comment: i.comment || ''
-          })),
-          ...this.expenses.map(e => ({
-            id: e.id,
-            type: 'expense',
-            name: e.note,
-            amount: e.amount,
-            date: e.date,
-            comment: e.comment || ''
-          }))
-        ]
-        console.log('Saving rows to sheet:', rows)  // ← DEBUG
-        await fetch(SHEET_API_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'replace-all', rows })
+        await addDoc(collection(db, 'entries'), {
+          type: 'investor',
+          name: f.name.trim(),
+          amount: Number(f.amount),
+          date: new Date(f.date + 'T' + new Date().toTimeString().slice(0, 8)).toISOString(),
+          comment: (f.comment || '').trim()
         })
-        // Increase delay to give Apps Script time to finish
-        setTimeout(() => this.loadFromSheet(), 2000)  // ← CHANGED from 400 to 2000
+        this.investorForm = { name: '', amount: null, date: this.todayISO(), comment: '' }
       } catch (e) {
-        console.error('Save failed', e)
-        this.storageState = 'error'
+        console.error('Add investor failed', e)
+        alert('Could not save. Check your internet connection.')
       } finally {
-        setTimeout(() => { this.syncing = false }, 800)
+        this.syncing = false
+      }
+    },
+    async addExpense() {
+      const f = this.expenseForm
+      if (!f.note || !f.amount || !f.date) return
+      this.syncing = true
+      try {
+        await addDoc(collection(db, 'entries'), {
+          type: 'expense',
+          name: f.note.trim(),
+          amount: Number(f.amount),
+          date: new Date(f.date + 'T' + new Date().toTimeString().slice(0, 8)).toISOString(),
+          comment: (f.comment || '').trim()
+        })
+        this.expenseForm = { note: '', amount: null, date: this.todayISO(), comment: '' }
+      } catch (e) {
+        console.error('Add expense failed', e)
+        alert('Could not save. Check your internet connection.')
+      } finally {
+        this.syncing = false
+      }
+    },
+    async removeEntry(id) {
+      try {
+        await deleteDoc(doc(db, 'entries', id))
+      } catch (e) {
+        console.error('Delete failed', e)
+        alert('Could not delete. Try again.')
       }
     }
   }
 }
 </script>
+
 <style>
 /* =========================
    Base
@@ -370,14 +352,12 @@ button:active {
   transform: translateY(1px);
 }
 
-/* App Container — বড় করা হয়েছে */
 #app {
   width: min(1400px, calc(100% - 40px));
   margin: 0 auto;
   padding: 38px 0 60px;
 }
 
-/* Header */
 .header {
   display: flex;
   align-items: center;
@@ -432,7 +412,6 @@ button:active {
   background: #eff6ff;
 }
 
-/* Storage Bar */
 .storage-bar {
   display: flex;
   align-items: center;
@@ -450,8 +429,7 @@ button:active {
 }
 
 .storage-bar .ok,
-.storage-bar .warn,
-.storage-bar .hint {
+.storage-bar .warn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -466,32 +444,6 @@ button:active {
   color: #92400e;
 }
 
-.storage-bar button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 7px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #374151;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.storage-bar button:hover {
-  border-color: #93c5fd;
-  color: var(--primary);
-  background: #eff6ff;
-}
-
-.storage-bar button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Summary Cards */
 .summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -571,7 +523,6 @@ button:active {
   background: var(--red);
 }
 
-/* Panels */
 .panels {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -601,9 +552,6 @@ button:active {
   margin-bottom: 18px;
 }
 
-/* =========================
-   Forms — 2-Row Grid
-========================= */
 .row-form {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -648,6 +596,7 @@ button:active {
   font-weight: 650;
   cursor: pointer;
   white-space: nowrap;
+  grid-column: 1 / -1;
 }
 
 .row-form button:hover {
@@ -655,7 +604,6 @@ button:active {
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
 
-/* Entry Lists */
 .entry-list {
   list-style: none;
   padding: 0;
@@ -699,7 +647,7 @@ button:active {
   font-weight: 650;
 }
 
-.entry-main>span {
+.entry-main > span {
   flex-shrink: 0;
   color: #111827;
   font-size: 13px;
@@ -714,6 +662,22 @@ button:active {
   margin-top: 5px;
   color: #9ca3af;
   font-size: 11px;
+}
+
+.entry-comment {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+  border-radius: 6px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+  font-style: italic;
 }
 
 .link-btn {
@@ -739,7 +703,6 @@ button:active {
   text-align: center;
 }
 
-/* Daily Breakdown */
 .daily {
   padding: 22px;
   border: 1px solid var(--border);
@@ -798,9 +761,6 @@ button:active {
   font-weight: 750;
 }
 
-/* =========================
-   Comment + Date Features
-========================= */
 .comment-input {
   font-size: 12px !important;
   color: #6b7280;
@@ -826,33 +786,12 @@ button:active {
   opacity: 1;
 }
 
-.entry-comment {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin-top: 6px;
-  padding: 6px 10px;
-  background: #f8fafc;
-  border-left: 3px solid #cbd5e1;
-  border-radius: 6px;
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.4;
-  word-break: break-word;
-  font-style: italic;
-}
-
-/* Focus Accessibility */
 button:focus-visible,
-input:focus-visible,
-label:focus-visible {
+input:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.2);
   outline-offset: 2px;
 }
 
-/* =========================
-   Responsive
-========================= */
 @media (max-width: 1000px) {
   .row-form {
     grid-template-columns: 1fr 1fr;
@@ -864,34 +803,27 @@ label:focus-visible {
     width: min(100% - 24px, 680px);
     padding-top: 24px;
   }
-
   .header {
     align-items: flex-start;
     flex-direction: column;
     gap: 16px;
   }
-
   .header h1 {
     font-size: 25px;
   }
-
   .month-picker {
     width: 100%;
     justify-content: space-between;
   }
-
   .month-picker span {
     flex: 1;
   }
-
   .summary {
     grid-template-columns: 1fr;
   }
-
   .card {
     min-height: 110px;
   }
-
   .panels {
     grid-template-columns: 1fr;
   }
@@ -902,41 +834,32 @@ label:focus-visible {
     width: calc(100% - 20px);
     padding-bottom: 35px;
   }
-
   .storage-bar {
     align-items: flex-start;
     flex-direction: column;
   }
-
   .row-form {
     grid-template-columns: 1fr;
   }
-
   .row-form button {
     width: 100%;
   }
-
   .panel,
   .daily {
     padding: 16px;
   }
-
   .daily {
     overflow-x: auto;
   }
-
   .daily table {
     min-width: 500px;
   }
-
   .card .value {
     font-size: 25px;
   }
-
   .comment-input {
     font-size: 13px !important;
   }
-
   .date-input {
     font-size: 13px !important;
   }
