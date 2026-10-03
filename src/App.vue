@@ -119,10 +119,7 @@
   </div>
 </template>
 <script>
-// ============================================
-// ⚠️ আপনার Apps Script Web App URL
-// ============================================
-const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbxWFfqK53sM7Ki4JSy6gCvBPQtt6dCsCjjFeO4QwDIyYXaVB5cYlZclNy82OpcPEPvE/exec'
+const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbwYvXWWfUnFqZa7yespRVDp1fC4k98KmsUiDKnWj-fb70wS_Ln5L8xnLdPbDtMRZBA8/exec'
 export default {
   name: 'App',
   data() {
@@ -308,13 +305,15 @@ export default {
             comment: e.comment || ''
           }))
         ]
+        console.log('Saving rows to sheet:', rows)  // ← DEBUG
         await fetch(SHEET_API_URL, {
           method: 'POST',
           mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'replace-all', rows })
         })
-        setTimeout(() => this.loadFromSheet(), 400)
+        // Increase delay to give Apps Script time to finish
+        setTimeout(() => this.loadFromSheet(), 2000)  // ← CHANGED from 400 to 2000
       } catch (e) {
         console.error('Save failed', e)
         this.storageState = 'error'
@@ -344,9 +343,11 @@ export default {
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
   --shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
 }
+
 * {
   box-sizing: border-box;
 }
+
 body {
   margin: 0;
   background: #ffffff;
@@ -354,23 +355,28 @@ body {
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+
 button,
 input {
   font: inherit;
 }
+
 button {
   transition: background 0.2s ease, border-color 0.2s ease,
     color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
+
 button:active {
   transform: translateY(1px);
 }
+
 /* App Container — বড় করা হয়েছে */
 #app {
   width: min(1400px, calc(100% - 40px));
   margin: 0 auto;
   padding: 38px 0 60px;
 }
+
 /* Header */
 .header {
   display: flex;
@@ -379,6 +385,7 @@ button:active {
   gap: 24px;
   margin-bottom: 28px;
 }
+
 .header h1 {
   margin: 0;
   color: #111827;
@@ -387,6 +394,7 @@ button:active {
   font-weight: 750;
   letter-spacing: -0.7px;
 }
+
 .month-picker {
   display: flex;
   align-items: center;
@@ -396,6 +404,7 @@ button:active {
   border: 1px solid var(--border);
   border-radius: 12px;
 }
+
 .month-picker span {
   min-width: 145px;
   text-align: center;
@@ -403,6 +412,7 @@ button:active {
   font-size: 14px;
   font-weight: 650;
 }
+
 .month-picker button {
   width: 34px;
   height: 34px;
@@ -416,10 +426,12 @@ button:active {
   cursor: pointer;
   box-shadow: var(--shadow-sm);
 }
+
 .month-picker button:hover {
   color: var(--primary);
   background: #eff6ff;
 }
+
 /* Storage Bar */
 .storage-bar {
   display: flex;
@@ -436,6 +448,7 @@ button:active {
   color: var(--muted);
   font-size: 13px;
 }
+
 .storage-bar .ok,
 .storage-bar .warn,
 .storage-bar .hint {
@@ -443,13 +456,16 @@ button:active {
   align-items: center;
   gap: 6px;
 }
+
 .storage-bar .ok {
   color: var(--green);
   font-weight: 600;
 }
+
 .storage-bar .warn {
   color: #92400e;
 }
+
 .storage-bar button {
   display: inline-flex;
   align-items: center;
@@ -463,15 +479,18 @@ button:active {
   font-weight: 600;
   cursor: pointer;
 }
+
 .storage-bar button:hover {
   border-color: #93c5fd;
   color: var(--primary);
   background: #eff6ff;
 }
+
 .storage-bar button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
 /* Summary Cards */
 .summary {
   display: grid;
@@ -479,6 +498,7 @@ button:active {
   gap: 16px;
   margin-bottom: 28px;
 }
+
 .card {
   position: relative;
   overflow: hidden;
@@ -493,6 +513,7 @@ button:active {
   justify-content: center;
   gap: 8px;
 }
+
 .card::after {
   content: "";
   position: absolute;
@@ -503,11 +524,13 @@ button:active {
   border-radius: 50%;
   opacity: 0.08;
 }
+
 .card .label {
   color: var(--muted);
   font-size: 13px;
   font-weight: 600;
 }
+
 .card .value {
   color: #111827;
   font-size: 28px;
@@ -515,30 +538,39 @@ button:active {
   font-weight: 750;
   letter-spacing: -0.6px;
 }
+
 .card.invest {
   border-top: 3px solid #10b981;
 }
+
 .card.invest::after {
   background: #10b981;
 }
+
 .card.spent {
   border-top: 3px solid #f59e0b;
 }
+
 .card.spent::after {
   background: #f59e0b;
 }
+
 .card.remain {
   border-top: 3px solid var(--primary);
 }
+
 .card.remain::after {
   background: var(--primary);
 }
+
 .card.remain.negative {
   border-top-color: var(--red);
 }
+
 .card.remain.negative::after {
   background: var(--red);
 }
+
 /* Panels */
 .panels {
   display: grid;
@@ -546,6 +578,7 @@ button:active {
   gap: 20px;
   margin-bottom: 28px;
 }
+
 .panel {
   min-width: 0;
   padding: 22px;
@@ -554,6 +587,7 @@ button:active {
   background: #ffffff;
   box-shadow: var(--shadow-sm);
 }
+
 .panel h2,
 .daily h2 {
   margin: 0;
@@ -562,9 +596,11 @@ button:active {
   font-weight: 700;
   letter-spacing: -0.2px;
 }
+
 .panel h2 {
   margin-bottom: 18px;
 }
+
 /* =========================
    Forms — 2-Row Grid
 ========================= */
@@ -574,6 +610,7 @@ button:active {
   gap: 10px;
   margin-bottom: 18px;
 }
+
 .row-form input {
   width: 100%;
   height: 40px;
@@ -586,16 +623,20 @@ button:active {
   font-size: 13px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
+
 .row-form input::placeholder {
   color: #9ca3af;
 }
+
 .row-form input:hover {
   border-color: #9ca3af;
 }
+
 .row-form input:focus {
   border-color: #60a5fa;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
+
 .row-form button {
   height: 40px;
   padding: 0 18px;
@@ -608,10 +649,12 @@ button:active {
   cursor: pointer;
   white-space: nowrap;
 }
+
 .row-form button:hover {
   background: var(--primary-dark);
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
+
 /* Entry Lists */
 .entry-list {
   list-style: none;
@@ -620,26 +663,32 @@ button:active {
   max-height: 310px;
   overflow-y: auto;
 }
+
 .entry-list::-webkit-scrollbar {
   width: 5px;
 }
+
 .entry-list::-webkit-scrollbar-thumb {
   background: #d1d5db;
   border-radius: 999px;
 }
+
 .entry-list li {
   padding: 13px 2px;
   border-bottom: 1px solid var(--border-light);
 }
+
 .entry-list li:last-child {
   border-bottom: 0;
 }
+
 .entry-main {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 15px;
 }
+
 .entry-main strong {
   min-width: 0;
   overflow: hidden;
@@ -649,12 +698,14 @@ button:active {
   font-size: 13px;
   font-weight: 650;
 }
+
 .entry-main>span {
   flex-shrink: 0;
   color: #111827;
   font-size: 13px;
   font-weight: 700;
 }
+
 .entry-meta {
   display: flex;
   justify-content: space-between;
@@ -664,6 +715,7 @@ button:active {
   color: #9ca3af;
   font-size: 11px;
 }
+
 .link-btn {
   padding: 0;
   border: 0;
@@ -672,10 +724,12 @@ button:active {
   font-size: 11px;
   cursor: pointer;
 }
+
 .link-btn:hover {
   color: #b91c1c;
   text-decoration: underline;
 }
+
 .empty {
   padding: 25px 10px !important;
   border: 0 !important;
@@ -684,6 +738,7 @@ button:active {
   font-style: italic;
   text-align: center;
 }
+
 /* Daily Breakdown */
 .daily {
   padding: 22px;
@@ -693,9 +748,11 @@ button:active {
   box-shadow: var(--shadow-sm);
   text-align: left;
 }
+
 .daily h2 {
   margin-bottom: 18px;
 }
+
 .daily table {
   width: 100%;
   border-collapse: separate;
@@ -704,6 +761,7 @@ button:active {
   border: 1px solid var(--border);
   border-radius: 10px;
 }
+
 .daily th {
   padding: 12px 14px;
   background: #f8fafc;
@@ -714,26 +772,32 @@ button:active {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+
 .daily td {
   padding: 13px 14px;
   border-bottom: 1px solid var(--border-light);
   color: #374151;
   font-size: 13px;
 }
+
 .daily tbody tr:last-child td {
   border-bottom: 0;
 }
+
 .daily tbody tr:hover {
   background: #fafcff;
 }
+
 .daily td:nth-child(2),
 .daily td:nth-child(3) {
   font-weight: 650;
 }
+
 .daily td.negative {
   color: var(--red);
   font-weight: 750;
 }
+
 /* =========================
    Comment + Date Features
 ========================= */
@@ -741,22 +805,27 @@ button:active {
   font-size: 12px !important;
   color: #6b7280;
 }
+
 .comment-input::placeholder {
   color: #9ca3af;
   font-style: italic;
 }
+
 .date-input {
   font-size: 12px !important;
   color: #6b7280;
   cursor: pointer;
 }
+
 .date-input::-webkit-calendar-picker-indicator {
   cursor: pointer;
   opacity: 0.6;
 }
+
 .date-input::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
 }
+
 .entry-comment {
   display: flex;
   align-items: flex-start;
@@ -772,6 +841,7 @@ button:active {
   word-break: break-word;
   font-style: italic;
 }
+
 /* Focus Accessibility */
 button:focus-visible,
 input:focus-visible,
@@ -779,6 +849,7 @@ label:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.2);
   outline-offset: 2px;
 }
+
 /* =========================
    Responsive
 ========================= */
@@ -787,67 +858,85 @@ label:focus-visible {
     grid-template-columns: 1fr 1fr;
   }
 }
+
 @media (max-width: 800px) {
   #app {
     width: min(100% - 24px, 680px);
     padding-top: 24px;
   }
+
   .header {
     align-items: flex-start;
     flex-direction: column;
     gap: 16px;
   }
+
   .header h1 {
     font-size: 25px;
   }
+
   .month-picker {
     width: 100%;
     justify-content: space-between;
   }
+
   .month-picker span {
     flex: 1;
   }
+
   .summary {
     grid-template-columns: 1fr;
   }
+
   .card {
     min-height: 110px;
   }
+
   .panels {
     grid-template-columns: 1fr;
   }
 }
+
 @media (max-width: 560px) {
   #app {
     width: calc(100% - 20px);
     padding-bottom: 35px;
   }
+
   .storage-bar {
     align-items: flex-start;
     flex-direction: column;
   }
+
   .row-form {
     grid-template-columns: 1fr;
   }
+
   .row-form button {
     width: 100%;
   }
+
   .panel,
   .daily {
     padding: 16px;
   }
+
   .daily {
     overflow-x: auto;
   }
+
   .daily table {
     min-width: 500px;
   }
+
   .card .value {
     font-size: 25px;
   }
+
   .comment-input {
     font-size: 13px !important;
   }
+
   .date-input {
     font-size: 13px !important;
   }
